@@ -2,6 +2,9 @@
 
 极致简单的妙妙直播web ui，基于WebRTC（由MediaMTX提供视频流转发），提供低延迟的单房间的直播服务/屏幕共享。
 
+配置后的预览:
+<img width="2299" height="1290" alt="image" src="https://github.com/user-attachments/assets/955ddf03-daec-4870-a68c-938c1aa97c21" />
+
 ## 运行
 
 直接下载编译好的二进制文件，解压到特定目录后，Windows 运行 `Hsin.exe`，Linux 运行 `./Hsin`。
