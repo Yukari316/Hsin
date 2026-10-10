@@ -1,0 +1,47 @@
+{
+  "WebUi": {
+    "ListenAddress": "0.0.0.0",
+    "Port": 24515,
+    "PublicOrigin": "http://localhost:24515",
+    "Token": ""
+  },
+  "Publish": {
+    "BearerToken": ""
+  },
+  "Appearance": {
+    "Title": "Hsin",
+    "LogoFile": "",
+    "BackgroundLeftFile": "",
+    "BackgroundRightFile": "",
+    "MobileBackgroundFile": "",
+    "IdleIconFile": "",
+    "IdleMessage": "直播尚未开始",
+    "PasswordPrompt": "请输入房间密码",
+    "AnnouncementFile": ""
+  },
+  "Tls": {
+    "CertificateFile": "",
+    "PrivateKeyFile": ""
+  },
+  "Logging": {
+    "FileEnabled": true,
+    "Directory": "logs",
+    "RetentionDays": 7,
+    "MinimumLevel": "Information"
+  },
+  "MediaMtx": {
+    "DataDirectory": "data/mediamtx",
+    "ListenAddress": "0.0.0.0",
+    "Port": 24516,
+    "PublicOrigin": "http://localhost:24516",
+    "AdditionalHosts": [],
+    "IceServers": [],
+    "ControlApi": {
+      "ListenAddress": "127.0.0.1",
+      "Port": 24517,
+      "User": "hsin-control",
+      "Password": "",
+      "AllowedIps": ["127.0.0.1/32", "::1/128"]
+    }
+  }
+}

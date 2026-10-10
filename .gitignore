@@ -234,7 +234,35 @@ __pycache__/
 # VS Code
 .vscode/
 
-# ---- Shinano Project Specific ----
+# ---- Hsin Project Specific ----
 
 # Agent doc
 agent_tmp/
+
+# Runtime configuration and generated assets
+/hsin.json
+/data/
+/logs/
+/server/wwwroot/
+
+# Frontend build cache and test output
+*.tsbuildinfo
+/web/dist/
+/web/coverage/
+/web/playwright-report/
+/web/test-results/
+
+# Package manager caches
+.pnpm-store/
+.pnpm-cache/
+.npm-cache/
+
+# Local environment configuration
+.env
+.env.local
+.env.*.local
+
+# Operating system files
+.DS_Store
+Thumbs.db
+Desktop.ini

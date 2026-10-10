@@ -1,0 +1,8 @@
+<Solution>
+    <Folder Name="/server/">
+        <Project Path="server/Hsin.csproj"/>
+    </Folder>
+    <Folder Name="/tests/">
+        <Project Path="tests/Hsin.Tests/Hsin.Tests.csproj"/>
+    </Folder>
+</Solution>
