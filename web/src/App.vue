@@ -4,12 +4,12 @@ import { getAnnouncement, getAppearanceAsset, getBootstrap, getRoom, Unauthorize
 import type { Bootstrap, Room } from './types'
 import PasswordPage from './components/PasswordPage.vue'
 import RoomPage from './components/RoomPage.vue'
-import { Sun, Moon } from '@lucide/vue'
-import { theme, toggleTheme } from './theme'
+import ThemeToggle from './components/ThemeToggle.vue'
 
 const bootstrap = ref<Bootstrap | null>(null)
 const room = ref<Room | null>(null)
 const announcement = ref('')
+const showcaseUrl = ref<string | null>(null)
 const token = ref<string | null>(null)
 const error = ref('')
 let pollTimer: ReturnType<typeof setTimeout> | undefined
@@ -24,6 +24,11 @@ function releaseIcon() {
   iconSource = null
 }
 
+function releaseShowcase() {
+  if (showcaseUrl.value) URL.revokeObjectURL(showcaseUrl.value)
+  showcaseUrl.value = null
+}
+
 function stopPolling() {
   clearTimeout(pollTimer)
   requestController?.abort()
@@ -33,6 +38,7 @@ function stopPolling() {
 function lostAccess() {
   stopPolling()
   releaseIcon()
+  releaseShowcase()
   token.value = null
   room.value = null
   announcement.value = ''
@@ -68,20 +74,25 @@ async function poll() {
 async function enter(value: string | null) {
   stopPolling()
   releaseIcon()
+  releaseShowcase()
   token.value = value
   room.value = null
   announcement.value = ''
   pollFailures = 0
   const controller = new AbortController()
   requestController = controller
-  try {
-    announcement.value = await getAnnouncement(value, controller.signal)
-  } catch (cause) {
-    if (controller.signal.aborted) return
-    if (cause instanceof UnauthorizedError) { lostAccess(); return }
-    // The room remains usable if the announcement request fails.
-  }
-  if (!controller.signal.aborted) void poll()
+  const showcasePath = bootstrap.value?.showcaseImageUrl
+  // 公告和展示图片各自失败时房间照常可用，只是不显示对应卡片；任一返回 401 则回到密码页。
+  // 展示图片需要认证，因此以 Blob 读取后交给 <img>。
+  const [text, showcase] = await Promise.allSettled([
+    getAnnouncement(value, controller.signal),
+    showcasePath ? getAppearanceAsset(showcasePath, value, controller.signal) : Promise.resolve(null),
+  ])
+  if (controller.signal.aborted) return
+  if ([text, showcase].some(result => result.status === 'rejected' && result.reason instanceof UnauthorizedError)) { lostAccess(); return }
+  if (text.status === 'fulfilled') announcement.value = text.value
+  if (showcase.status === 'fulfilled' && showcase.value) showcaseUrl.value = URL.createObjectURL(showcase.value)
+  void poll()
 }
 
 onMounted(async () => {
@@ -90,40 +101,20 @@ onMounted(async () => {
     if (!bootstrap.value.requiresToken) void enter(null)
   } catch { error.value = '页面暂时不可用，请刷新重试' }
 })
-onUnmounted(() => { stopPolling(); releaseIcon() })
+onUnmounted(() => { stopPolling(); releaseIcon(); releaseShowcase() })
 watch(() => bootstrap.value?.title, title => { if (title) document.title = title })
 </script>
 
 <template>
-  <div class="app-root min-h-screen">
-    <div class="theme-switch-position app-content-width">
-      <div class="tooltip tooltip-left" :data-tip="theme === 'dark' ? '浅色主题' : '深色主题'">
-        <button class="btn btn-circle btn-ghost" :aria-label="theme === 'dark' ? '切换浅色主题' : '切换深色主题'" @click="toggleTheme">
-          <Sun v-if="theme === 'dark'" :size="20" />
-          <Moon v-else :size="20" />
-        </button>
-      </div>
-    </div>
+  <div class="app-root min-h-dvh">
     <template v-if="bootstrap">
-    <div
-      v-if="(!bootstrap.requiresToken || token !== null) && bootstrap.backgroundLeftUrl"
-      class="app-background-image app-background-desktop app-background-left"
-      :style="{ backgroundImage: `url(${JSON.stringify(bootstrap.backgroundLeftUrl)})` }"
-    />
-    <div
-      v-if="(!bootstrap.requiresToken || token !== null) && bootstrap.backgroundRightUrl"
-      class="app-background-image app-background-desktop app-background-right"
-      :style="{ backgroundImage: `url(${JSON.stringify(bootstrap.backgroundRightUrl)})` }"
-    />
-    <div
-      v-if="(!bootstrap.requiresToken || token !== null) && bootstrap.mobileBackgroundUrl"
-      class="app-background-image app-background-mobile"
-      :style="{ backgroundImage: `url(${JSON.stringify(bootstrap.mobileBackgroundUrl)})` }"
-    />
-    <PasswordPage v-if="bootstrap.requiresToken && token === null" :prompt="bootstrap.passwordPrompt" @authenticated="enter" />
-    <RoomPage v-else :bootstrap="bootstrap" :room="room" :announcement="announcement" :token="token" />
+      <template v-if="bootstrap.requiresToken && token === null">
+        <div class="absolute right-4 top-3 z-10"><ThemeToggle /></div>
+        <PasswordPage :title="bootstrap.title" :logo-url="bootstrap.logoUrl" :prompt="bootstrap.passwordPrompt" @authenticated="enter" />
+      </template>
+      <RoomPage v-else :bootstrap="bootstrap" :room="room" :announcement="announcement" :token="token" :showcase-url="showcaseUrl" />
     </template>
-    <div v-else class="app-shell items-center justify-center p-4">
+    <div v-else class="grid min-h-dvh place-items-center p-4">
       <p v-if="error" class="alert alert-error max-w-md" role="alert">{{ error }}</p>
       <span v-else class="loading loading-spinner loading-lg" aria-label="正在加载" />
     </div>

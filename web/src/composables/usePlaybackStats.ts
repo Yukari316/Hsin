@@ -6,6 +6,7 @@ export interface TrackStats {
   decoder: string | null
   powerEfficient: boolean | null
   resolution: string | null
+  height: number | null
   fps: number | null
   bitrate: number | null
   bytes: number | null
@@ -67,6 +68,7 @@ export function summarizeStats(report: RTCStatsReport, baseline: Map<string, Sam
         decoder: typeof sample.decoderImplementation === 'string' ? sample.decoderImplementation : null,
         powerEfficient: typeof sample.powerEfficientDecoder === 'boolean' ? sample.powerEfficientDecoder : null,
         resolution: typeof sample.frameWidth === 'number' && typeof sample.frameHeight === 'number' ? `${sample.frameWidth} × ${sample.frameHeight}` : null,
+        height: number(sample, 'frameHeight'),
         fps: number(sample, 'framesPerSecond'),
         bitrate: bytes !== null && elapsed > 0 ? 8 * bytes / elapsed : null,
         bytes: number(sample, 'bytesReceived'),

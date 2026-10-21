@@ -95,9 +95,9 @@ chmod u+x ./Hsin
 
 ## 外观与配置生效
 
-`Appearance` 可配置 Title、LogoFile、BackgroundLeftFile、BackgroundRightFile、MobileBackgroundFile、IdleIconFile、IdleMessage、PasswordPrompt 和 AnnouncementFile。左右桌面背景图片以及移动背景图片均可为空。内容宽度随 Hsin 可用区域增长，最大 1400px；桌面两侧背景宽度相同，由内容区边界自动计算。可用宽度不小于 1360px 时，调试窗在右侧背景区域水平居中，距可视窗口底部 24px；空间不足时显示在播放器下方，不改变播放器宽度。移动端使用 MobileBackgroundFile 作为单张整页背景；未配置时只显示主题底色，不回退到桌面背景。背景图使用 `cover` 并居中裁切。界面首次根据系统选择亮色或暗色，并在浏览器本地记住选择；亮色使用 DaisyUI `fantasy`，暗色使用 DaisyUI `sunset`。页面、密码页、标题栏、主体和页脚使用当前主题的 `base-100`；卡片背景使用 `base-100`、边框使用 `base-300`，调试小窗保留 70% 不透明度。密码页面不渲染自定义背景图片，认证进入房间后才显示。背景图片各自使用黑色遮罩，fantasy 遮罩 alpha 为 0.15（背景透出 0.85），sunset 遮罩 alpha 为 0.7（背景透出 0.3），遮罩不覆盖中央内容区。播放器播放、暂停、连接及故障时保持黑底，空闲时使用主题 `base-200`，控制栏使用 `base-300`。
+`Appearance` 可配置 Title、LogoFile、ShowcaseImageFile、IdleIconFile、IdleMessage、PasswordPrompt 和 AnnouncementFile。页面采用卡片网格布局：桌面端播放器右侧依次为直播状态卡、画面信息卡（分辨率、帧率、视频码率、延迟估算）和展示图片卡，播放统计与公告位于下方；移动端按同样顺序单列排列。ShowcaseImageFile 是展示图片卡使用的图片，可为空，为空时不显示该卡片；图片完整显示，空余区域用同图模糊填充，竖图、横图均可。不再支持整页或左右背景图，旧配置中的 BackgroundLeftFile、BackgroundRightFile、MobileBackgroundFile 会被忽略。界面首次根据系统选择亮色或暗色，并在浏览器本地记住选择。延迟估算仅表示浏览器从收到画面到显示的时间，不包含网络和服务器转发延迟。
 
-公告使用 Markdown 文件，支持 GitHub 风格渲染和净化后的 HTML。背景资源和 Logo 接口可匿名读取，但密码页面不渲染自定义背景；受保护的 idle 图标、公告及房间信息仍需 Bearer token。图片、公告与配置都在启动时读取；运行期间修改文件不会生效。
+公告使用 Markdown 文件，支持 GitHub 风格渲染和净化后的 HTML。Logo 接口可匿名读取，密码页面会显示 Logo 和标题；展示图片、idle 图标、公告及房间信息需要 Bearer token，密码页面不显示展示图片。图片、公告与配置都在启动时读取；运行期间修改文件不会生效。
 
 每次启动读取 `hsin.json` 并重新生成 `MediaMtx.DataDirectory/run/mediamtx.yml`。不手改生成文件，也不通过 MediaMTX API 改写配置。修改完成后停止并重新启动 Hsin；同一次运行中的媒体子进程重启仍使用当次配置快照。
 

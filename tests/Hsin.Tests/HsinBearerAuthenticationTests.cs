@@ -26,11 +26,11 @@ public sealed class HsinBearerAuthenticationTests
         try
         {
             string configPath = Path.Combine(directory, "hsin.json");
-            await File.WriteAllBytesAsync(Path.Combine(directory, "mobile.png"), [7, 8, 9]);
+            await File.WriteAllBytesAsync(Path.Combine(directory, "showcase.png"), [7, 8, 9]);
             await File.WriteAllTextAsync(
                 configPath,
                 """
-                {"WebUi":{"Token":"测试口令"},"Appearance":{"MobileBackgroundFile":"mobile.png"},"Logging":{"FileEnabled":false}}
+                {"WebUi":{"Token":"测试口令"},"Appearance":{"ShowcaseImageFile":"showcase.png"},"Logging":{"FileEnabled":false}}
                 """);
             using ResolvedConfiguration configuration = await ConfigurationLoader.LoadAsync(configPath);
             using MediaMtxApiClient     api           = new(configuration);
@@ -62,14 +62,12 @@ public sealed class HsinBearerAuthenticationTests
             using (JsonDocument document = JsonDocument.Parse(bootstrap))
             {
                 Assert.Equal(
-                    "/assets/appearance/background-mobile",
-                    document.RootElement.GetProperty("mobileBackgroundUrl").GetString());
-                Assert.False(document.RootElement.TryGetProperty("backgroundLeftWidth", out _));
+                    "/assets/appearance/showcase",
+                    document.RootElement.GetProperty("showcaseImageUrl").GetString());
             }
 
-            using HttpResponseMessage mobileBackground = await client.GetAsync("/assets/appearance/background-mobile");
-            Assert.Equal(HttpStatusCode.OK, mobileBackground.StatusCode);
-            Assert.Equal([7, 8, 9], await mobileBackground.Content.ReadAsByteArrayAsync());
+            using HttpResponseMessage anonymousShowcase = await client.GetAsync("/assets/appearance/showcase");
+            Assert.Equal(HttpStatusCode.Unauthorized, anonymousShowcase.StatusCode);
 
             using HttpResponseMessage anonymous = await client.GetAsync("/api/room");
             Assert.Equal(HttpStatusCode.Unauthorized, anonymous.StatusCode);
@@ -96,6 +94,8 @@ public sealed class HsinBearerAuthenticationTests
             Assert.Contains("initializing", room);
             string announcement = await client.GetStringAsync("/api/announcement");
             Assert.Empty(announcement);
+            byte[] showcase = await client.GetByteArrayAsync("/assets/appearance/showcase");
+            Assert.Equal([7, 8, 9], showcase);
 
             using HttpResponseMessage missing = await client.GetAsync("/api/not-a-route");
             Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);

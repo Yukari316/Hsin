@@ -19,17 +19,9 @@ public sealed class AppearanceController : ControllerBase
     [HttpGet("logo")]
     public IActionResult Logo() => Resource("logo");
 
-    [AllowAnonymous]
-    [HttpGet("background-left")]
-    public IActionResult BackgroundLeft() => Resource("background-left");
-
-    [AllowAnonymous]
-    [HttpGet("background-right")]
-    public IActionResult BackgroundRight() => Resource("background-right");
-
-    [AllowAnonymous]
-    [HttpGet("background-mobile")]
-    public IActionResult BackgroundMobile() => Resource("background-mobile");
+    [Authorize]
+    [HttpGet("showcase")]
+    public IActionResult Showcase() => Resource("showcase");
 
     [Authorize]
     [HttpGet("idle-icon")]

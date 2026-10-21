@@ -11,9 +11,7 @@
   "Appearance": {
     "Title": "Hsin",
     "LogoFile": "",
-    "BackgroundLeftFile": "",
-    "BackgroundRightFile": "",
-    "MobileBackgroundFile": "",
+    "ShowcaseImageFile": "",
     "IdleIconFile": "",
     "IdleMessage": "直播尚未开始",
     "PasswordPrompt": "请输入房间密码",

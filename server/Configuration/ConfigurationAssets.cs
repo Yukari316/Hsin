@@ -12,9 +12,7 @@ internal static class ConfigurationAssets
     {
         Dictionary<string, AppearanceResource> resources = new(StringComparer.Ordinal);
         await ReadResourceAsync("logo", appearance.LogoFile, "LogoFile");
-        await ReadResourceAsync("background-left", appearance.BackgroundLeftFile, "BackgroundLeftFile");
-        await ReadResourceAsync("background-right", appearance.BackgroundRightFile, "BackgroundRightFile");
-        await ReadResourceAsync("background-mobile", appearance.MobileBackgroundFile, "MobileBackgroundFile");
+        await ReadResourceAsync("showcase", appearance.ShowcaseImageFile, "ShowcaseImageFile");
         await ReadResourceAsync("idle-icon", appearance.IdleIconFile, "IdleIconFile");
         string announcement = string.Empty;
         if (!string.IsNullOrWhiteSpace(appearance.AnnouncementFile))

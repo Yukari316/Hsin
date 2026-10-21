@@ -266,3 +266,6 @@ agent_tmp/
 .DS_Store
 Thumbs.db
 Desktop.ini
+
+.claude/
+.playwright-mcp/

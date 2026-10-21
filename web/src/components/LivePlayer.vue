@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
-import { Radio, SignalZero } from '@lucide/vue'
+import { LoaderCircle, Pause, Radio, SignalZero } from '@lucide/vue'
 import type { Room } from '../types'
 import { useWebRtcPlayer } from '../composables/useWebRtcPlayer'
 import { estimateReceiveToDisplay, usePlaybackStats } from '../composables/usePlaybackStats'
@@ -23,26 +23,42 @@ const fullscreen = ref(false)
 const feedback = ref('')
 const autoplayBlocked = ref(false)
 const player = useWebRtcPlayer()
-const { stats, restart: restartStats } = usePlaybackStats(computed(() => props.debugOpen), player.getStats)
+// 画面信息卡常驻显示码率和延迟估算，因此播放期间始终每秒采集一次统计。
+const playing = computed(() => !!player.stream.value && !paused.value)
+const { stats, restart: restartStats } = usePlaybackStats(playing, player.getStats)
 let frameCallbackId: number | null = null
+// 两次统计采样之间逐帧累计的接收至显示估算，随统计按秒取平均后清零。
+let latencySum = 0
+let latencyCount = 0
 
-watch(stats, value => emit('stats', value))
+watch(stats, value => {
+  emit('latency', latencyCount > 0 ? latencySum / latencyCount : null)
+  latencySum = 0
+  latencyCount = 0
+  emit('stats', value)
+})
 
 function stopFrameTiming() {
   if (frameCallbackId !== null && video.value?.cancelVideoFrameCallback) {
     video.value.cancelVideoFrameCallback(frameCallbackId)
   }
   frameCallbackId = null
+  latencySum = 0
+  latencyCount = 0
   emit('latency', null)
 }
 
 function scheduleFrameTiming() {
   stopFrameTiming()
-  if (!props.debugOpen || paused.value || !player.stream.value || !video.value?.requestVideoFrameCallback) return
+  if (!playing.value || !video.value?.requestVideoFrameCallback) return
   const currentVideo = video.value
   function sampleFrame(_now: number, metadata: VideoFrameCallbackMetadata & { receiveTime?: number }) {
-    if (!props.debugOpen || paused.value || video.value !== currentVideo) return
-    emit('latency', estimateReceiveToDisplay(metadata))
+    if (!playing.value || video.value !== currentVideo) return
+    const estimate = estimateReceiveToDisplay(metadata)
+    if (estimate !== null) {
+      latencySum += estimate
+      latencyCount++
+    }
     frameCallbackId = currentVideo.requestVideoFrameCallback(sampleFrame)
   }
   frameCallbackId = currentVideo.requestVideoFrameCallback(sampleFrame)
@@ -99,8 +115,6 @@ function togglePause() {
   if (props.room.whepUrl) player.start(props.room.whepUrl, props.token)
 }
 
-watch(() => props.debugOpen, scheduleFrameTiming, { flush: 'post' })
-
 function toggleMute() {
   muted.value = !muted.value
   if (video.value) video.value.muted = muted.value || paused.value
@@ -134,27 +148,23 @@ onUnmounted(() => { document.removeEventListener('fullscreenchange', syncFullscr
 </script>
 
 <template>
-  <section ref="shell" :class="['player-shell card rounded-box border border-base-300 bg-base-100 shadow-sm', { 'is-idle': room?.status === 'idle', 'is-page-fullscreen': pageFullscreen }]" aria-label="直播画面">
-    <div class="player-card-body card-body p-0">
+  <section ref="shell" :class="['player-shell tile', { 'is-idle': room?.status === 'idle', 'is-page-fullscreen': pageFullscreen }]" aria-label="直播画面">
     <div class="player-stage">
-      <template v-if="room?.status === 'idle'">
-        <div class="flex flex-col items-center gap-3 px-4 text-center text-base-content">
-          <img v-if="room.idleIconUrl" :src="room.idleIconUrl" alt="" class="h-12 w-12 object-contain" />
-          <Radio v-else :size="42" aria-hidden="true" />
-          <p class="text-sm sm:text-base">{{ room.idleMessage }}</p>
-        </div>
-      </template>
+      <div v-if="room?.status === 'idle'" class="flex flex-col items-center gap-3 px-6 text-center">
+        <img v-if="room.idleIconUrl" :src="room.idleIconUrl" alt="" class="size-16 object-contain" />
+        <Radio v-else :size="40" class="opacity-50" aria-hidden="true" />
+        <p class="font-medium sm:text-lg">{{ room.idleMessage }}</p>
+      </div>
       <template v-else>
         <video v-show="!!player.stream.value" ref="video" playsinline :muted="muted || paused" />
-        <div v-if="!player.stream.value || paused" class="absolute inset-0 flex items-center justify-center px-5 text-center text-sm text-white/80">
-          <p v-if="room?.status === 'unavailable'" class="flex items-center gap-2"><SignalZero :size="18" /> 媒体服务暂时不可用</p>
-          <p v-else-if="room?.status === 'initializing' || !room">正在连接媒体服务</p>
-          <p v-else-if="paused">已暂停</p>
-          <p v-else-if="player.error.value">直播连接失败</p>
-          <p v-else>正在连接直播</p>
+        <div v-if="!player.stream.value || paused" class="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center text-sm">
+          <template v-if="room?.status === 'unavailable'"><SignalZero :size="30" aria-hidden="true" /><p>媒体服务暂时不可用，正在重试</p></template>
+          <template v-else-if="paused"><Pause :size="34" aria-hidden="true" /><p>已暂停</p></template>
+          <template v-else-if="player.error.value"><SignalZero :size="30" aria-hidden="true" /><p>直播连接失败，正在重试</p></template>
+          <template v-else><LoaderCircle :size="30" class="animate-spin" aria-hidden="true" /><p>{{ room?.status === 'live' ? '正在连接直播' : '正在连接媒体服务' }}</p></template>
         </div>
       </template>
-      <p v-if="feedback" class="alert alert-warning absolute bottom-2 left-2 right-2 z-10 text-sm" role="status">{{ feedback }}</p>
+      <p v-if="feedback" class="alert alert-warning absolute bottom-3 left-3 right-3 z-10 text-sm" role="status">{{ feedback }}</p>
     </div>
     <PlayerControls
       :paused="paused || autoplayBlocked" :muted="muted" :volume="volume" :live="room?.status === 'live'"
@@ -162,6 +172,5 @@ onUnmounted(() => { document.removeEventListener('fullscreenchange', syncFullscr
       @pause="togglePause" @mute="toggleMute" @volume="setVolume"
       @page-fullscreen="togglePageFullscreen" @fullscreen="toggleFullscreen" @debug="emit('update:debugOpen', !debugOpen)"
     />
-    </div>
   </section>
 </template>

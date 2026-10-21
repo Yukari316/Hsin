@@ -2,9 +2,7 @@ export interface Bootstrap {
   requiresToken: boolean
   title: string
   logoUrl: string | null
-  backgroundLeftUrl: string | null
-  backgroundRightUrl: string | null
-  mobileBackgroundUrl: string | null
+  showcaseImageUrl: string | null
   passwordPrompt: string
 }
 

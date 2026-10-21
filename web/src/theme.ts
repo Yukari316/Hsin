@@ -2,9 +2,9 @@ import { ref } from 'vue'
 
 export type Theme = 'light' | 'dark'
 
-export const themeDataNames: Record<Theme, 'fantasy' | 'sunset'> = {
-  light: 'fantasy',
-  dark: 'sunset',
+export const themeDataNames: Record<Theme, 'valentine' | 'dracula'> = {
+  light: 'valentine',
+  dark: 'dracula',
 }
 
 function initialTheme(): Theme {

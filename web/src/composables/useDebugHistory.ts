@@ -14,8 +14,8 @@ export interface DebugHistoryPoint {
 
 export const DEBUG_HISTORY_LIMIT = 60
 
+// 直播播放期间持续记录最近一分钟，打开统计时即可看到历史曲线；统计中断（null）时清空。
 export function useDebugHistory(
-  enabled: Ref<boolean>,
   stats: Ref<PlaybackStats | null>,
   receiveToDisplayMs: Ref<number | null>
 ) {
@@ -42,19 +42,12 @@ export function useDebugHistory(
     ].slice(-DEBUG_HISTORY_LIMIT)
   }
 
-  const stop = watch(enabled, value => {
-    if (!value) clear()
-  })
   const sample = watch(stats, value => {
-    if (!enabled.value) return
     if (value === null) clear()
     else append(value)
   })
 
-  onUnmounted(() => {
-    stop()
-    sample()
-  })
+  onUnmounted(sample)
 
   return { history, clear }
 }

@@ -2,7 +2,7 @@ ref:~/.codex/AGENTS.md
 
 # Hsin 工程协作规范
 
-本文适用于整个仓库。项目需求已经实现，后续以维护当前功能和修复明确问题为主。项目代码风格与工程约束完整写在本文中，除顶部的全局规则外，不依赖其他外部规范文件。当前用户明确指令优先于本文。
+本文适用于整个仓库，是 Codex 与 Claude Code（经 `CLAUDE.md` 引用）共用的唯一仓库指引。项目需求已经实现，后续以维护当前功能和修复明确问题为主。项目代码风格与工程约束完整写在本文中，除顶部的全局规则外，不依赖其他外部规范文件。当前用户明确指令优先于本文。
 
 ## 1. 工程概览
 
@@ -25,6 +25,8 @@ ref:~/.codex/AGENTS.md
 - `server/Media/Process/`：平台进程生命周期。Windows 使用 `MediaMtxWindowsProcess` 和 Job Object；Linux 使用 `MediaMtxLinuxProcess`、专用 `LinuxMtxGuardian` 和原生辅助代码。
 - `server/Web/`：控制器、Bearer 认证和静态页面回退。
 - `server/Logging/`：Serilog 初始化、文件会话和日志保留。
+- `server/Infrastructure/`：`AtomicFile` 原子写入，供配置回写、安装状态、MediaMTX 运行配置和证书快照共用。
+- 生产类型以 `internal` 为主，`server/Properties/AssemblyInfo.cs` 通过 `InternalsVisibleTo` 向 `Hsin.Tests` 公开。
 
 边界要求：
 
@@ -38,15 +40,17 @@ ref:~/.codex/AGENTS.md
 - MediaMTX 意外退出时记录原因并停止 Hsin，由管理员或外部服务管理器重启。进程和输出泵应在全局日志关闭前完成清理。
 - 工程只运行一个固定 `live` 房间；OBS 使用 WHIP，浏览器使用 WHEP，新授权推流替换上一个推流。服务器仅转发，不做音视频二次编解码、录制或历史视频缓存。
 - Windows/Linux 均支持直接运行，发布为自包含应用，不引入 Docker 部署。设计容量约 8 人共享 1080p、服务器总带宽 100 Mbps；延迟争取低于 1 秒，1～2 秒为可接受范围，性能结论必须有实测支持。
+- 房间状态链路：`RoomMonitor` 每秒查询 Control API 的 `live` 路径，生成 `RoomSnapshot`（`idle`/`live`/`unavailable`），`Generation` 由本次启动 ID 与推流 `SourceId` 组成；前端轮询 `GET /api/room`，`generation` 变化即触发播放器重建 WHEP 连接，新推流替换旧推流依赖这一机制。
+- `CommandDispatcher` 在 `MediaMtx.DataDirectory` 下独占打开 `hsin.lock`，服务器、`mediamtx update` 和 `rollback` 共用该锁，同一数据目录同时只能有一个实例；MediaMTX 运行配置每次启动生成到该目录的 `run/mediamtx.yml`。
 
 ### 前端
 
 - 页面组件放在 `web/src/components/`，统计和生命周期 composable 放在 `web/src/composables/`。
-- `App.vue` 负责启动数据、主题、背景层和鉴权页面切换；`RoomPage.vue` 负责房间页面布局；`LivePlayer.vue` 负责 WebRTC 播放器生命周期；`DebugPanel.vue` 负责调试数据展示。
+- `App.vue` 负责启动数据、鉴权页面切换、公告与展示图片加载和房间轮询（失败指数退避至 8 秒，401 回到密码页）；`RoomPage.vue` 负责便当网格布局，侧栏由 `RoomStatusCard`、`StreamInfoCard`、`ShowcaseCard` 组成；`LivePlayer.vue` 按房间状态、`generation`、`whepUrl` 和 Token 驱动播放，底层 reader 的启动、停止与过期回调隔离在 `useWebRtcPlayer`；`DebugPanel.vue` 负责调试数据展示。
 - 采用 JavaScript + `<video>` 播放，复用 `web/src/vendor/reader.js`；保留第三方来源说明和许可证。
 - 前端包管理器为 pnpm，保留 `web/pnpm-lock.yaml`；不生成 npm/yarn 锁文件。后端在 `server/` 下保持单项目，前端独立位于根目录 `web/`。
-- UI 遵守 daisyUI 组件和主题风格。主题色只使用 `--color-*`，不覆写官方主题为硬编码 RGB/OKLCH。
-- 亮色使用 `fantasy`，暗色使用 `sunset`；首次跟随系统，此后保存用户选择。右上角保留单图标圆形主题按钮，并与标题栏内容边界对齐。
+- UI 采用便当网格（Bento）风格，使用 daisyUI 组件。亮色主题使用 daisyUI 内置 `valentine`，暗色使用 `dracula`，组件中只引用 `--color-*` 等主题变量，不散落硬编码颜色。
+- 首次跟随系统选择亮/暗主题，此后保存用户选择。标题栏右侧保留单图标圆形主题按钮；密码页按钮位于右上角。
 
 ## 3. C# 代码规范
 
@@ -95,35 +99,34 @@ ref:~/.codex/AGENTS.md
 
 ### UI 与主题约束
 
-- 标题栏、主体、页脚使用同一宽度计算与水平居中规则，主题按钮随标题栏对齐，调试窗不挤压播放器或拉宽标题栏。
-- 页面、密码页、标题栏、主体和普通卡片背景使用 `--color-base-100`，卡片边框使用 `--color-base-300`。空闲播放器使用 `--color-base-200`，控制栏使用 `--color-base-300`。
-- 播放器采用 daisyUI card 和圆角；实际视频、暂停、连接和故障状态保持黑底以避免与页面背景混合。黑色视频底和已约定的黑色图片遮罩是主题变量规则的必要例外。
-- 背景固定适应可视窗口宽高、等比 `cover`、居中裁切，不随整页内容拉长或滚动。桌面左右背景各占中央内容区到窗口边缘的留白，宽度对称。
-- 移动端使用独立的可空单图背景；空配置只显示主题底色。密码页不显示自定义图片。遮罩只覆盖图片，亮色 alpha 为 0.15、暗色 alpha 为 0.7，不能压暗中央内容区。
-- 调试小窗在主体外的右背景区域水平居中，距可视底部 24px；空间不足时放在播放器下方，移动端始终在下方。1700px 可用宽度支持两列，较窄留白使用单列；列数按小窗自身宽度判断。
-- 小窗背景使用 `base-100` 的 70% 不透明色，不做背景模糊；高度随内容增长，只有固定停靠时超过可视高度才内部滚动，下方布局由页面滚动。
-- metric 图表完全透明，文字使用 `--color-base-content`，边框使用 `--color-base-300`，曲线使用 `--color-info`。标题采用“名称 空格 实时值”，保留动态最大/最小值。
+- 标题栏、主体、页脚使用同一 `page-width` 宽度并水平居中。页面底色为 `--color-base-200`，卡片（`.tile`）为 `--color-base-100` 加大圆角。
+- 桌面布局为“播放器 | 300px 侧栏”，侧栏依次为状态卡、画面卡和可选展示图片卡，展示图片填满侧栏剩余高度；播放统计和公告位于下方并跨两列。窄屏单列，顺序为播放器、侧栏、统计、公告，不出现横向滚动。
+- 实际视频、暂停、连接和故障状态保持黑底，黑色视频底是主题变量规则的必要例外；空闲状态使用主题底色和 idle 图标。
+- 不使用整页或两侧背景图。展示图片只在认证后以 Blob 加载，完整显示（`contain`），空余处用同图模糊填充；密码页不显示展示图片。
+- 画面卡显示分辨率、帧率、视频码率和延迟估算；直播播放期间统计每秒采集一次，延迟估算为该秒内逐帧接收至显示估算的平均值，无数据时显示占位符。
+- 播放统计由播放器控制栏按钮展开，在播放器下方显示指标卡和连接详情；历史在播放期间持续记录，展开即可看到最近一分钟。指标卡曲线使用 `--color-info`，显示当前值和最低/最高值。
 - 原生 SVG 曲线依次为帧率、接收至显示估算、视频码率、音频码率、抖动、RTT、接收速率、发送速率。每秒统计、保留最近 60 点；缺失值不伪造为 0，也不跨缺失点连线。
 - 码率/速率当前值与上下限分别独立选单位：低于 1 Mbps 用 Kbps，否则用 Mbps；十进制 `1 Mbps = 1000 Kbps`，保留两位小数，图表与文字共用格式化函数。
 - 接收至显示估算只表示浏览器帧接收至预计显示的时间；缺少浏览器数据时显示不可用，不能宣称是服务器入站至显示或端到端延迟。
-- 公告使用 GitHub 风格 Markdown，允许净化后的 HTML，必须保留安全过滤和卡片内边距。页脚保留可点击的 `Powered by Hsin | MediaMTX` 工程链接。
+- 公告使用 GitHub 风格 Markdown，允许净化后的 HTML，必须保留安全过滤和卡片内边距。页脚保留可点击的 `Powered by Hsin · MediaMTX` 工程链接。
 
 ## 5. 配置与安全约束
 
 - 默认 Web UI 端口为 `24515`，MediaMTX WebRTC/WHIP/WHEP 端口为 `24516`，Control API 默认 `127.0.0.1:24517`。
-- HTTP 端点使用控制器特性路由与认证中间件，通过 `[Authorize]`/`[AllowAnonymous]` 声明边界，不能在路由里重复手写授权判断。`POST /api/access` 有效认证返回 204，无效返回 401。
+- HTTP 端点使用控制器特性路由与认证中间件，通过 `[Authorize]`/`[AllowAnonymous]` 声明边界，不能在路由里重复手写授权判断。`POST /api/access` 有效认证返回 204，无效返回 401，并受每分钟 10 次的固定窗口限流（超出返回 429）。未匹配的 `/api/*` 由 `ApiFallbackController` 返回 404，不落入 SPA 回退。
 - 默认不要求 Web UI Token；设置 `WebUi.Token` 后通过 Bearer 认证访问受保护 API，Token 只在前端内存中保存，刷新重新输入。MediaMTX WHEP 的 viewer 认证独立处理。
 - 密码页保持提示、密码输入框和单图标确认按钮；普通 Enter 或点击确认进入，忽略组合 Enter 和输入法组合阶段，错误时显示提示及红色输入框描边。
 - 推流使用独立的 `Publish.BearerToken`；不要复用观众 Token、Control API 凭据或把 Token 放入日志和静态文件。
 - `WebUi.PublicOrigin` 和 `MediaMtx.PublicOrigin` 必须是完整 origin，不包含路径、查询、片段或用户凭据；TLS 开启时必须使用 HTTPS。
 - WebRTC CORS、`AdditionalHosts`、监听地址和防火墙规则必须保持一致；远程部署必须使用客户端可达的域名/IP，不能把 `localhost` 当远程地址。
 - TLS 证书和私钥必须成对配置，启动时读取并生成 MediaMTX 证书快照；不自动降级到 HTTP。
+- 配置默认路径为程序目录下的 `hsin.json`，可用 `--config` 指定；文件缺失时按默认值生成。`Publish.BearerToken` 为空时生成 `publisher:` 前缀的随机令牌并原子写回配置文件，其他凭据不自动生成。
 - 自定义内容通过配置文件指定；路径按配置文件目录解析。配置、图片、公告和证书在启动时读取，不做文件热监听；每次启动基于本次快照重新生成媒体运行配置。
 - 首次缺失时自动下载 MediaMTX，正常启动复用已安装版本；管理员使用 `mediamtx update`/`rollback` 更新或回退。支持 `--mediamtx-package` 导入 ZIP/TAR.GZ 三文件包，校验二进制、配置和 LICENSE。
 - 安装状态记录二进制 SHA-256；启动前先校验哈希和二进制 `--version`，再启动平台媒体进程/Guardian，启动后检查 Control API 就绪。版本检查不能以 Control API 替代。
 - 候选失败时，只有旧活动版本独立通过预检才能接管；无可用版本则报错退出。显式导入失败报错并清理失败候选，不静默使用旧版本。更新和回退不能干预仍持有安装目录锁的运行实例。
-- 日志使用 Serilog，默认保留 7 天；路径、保留天数和文件启用开关可配置。文件名为本地启动时间 `yyyy-MM-dd_HH-mm-ss.log`，同秒追加、跨天仍写原文件。关闭文件日志不创建目录、不清理历史；活动日志和未知命名文件不删除。
-- `Appearance.MobileBackgroundFile` 是移动端单图背景；左右桌面背景宽度完全由布局计算。
+- 日志使用 Serilog，默认保留 7 天；路径、保留天数、最低级别和文件启用开关可配置。文件名为本地启动时间 `yyyy-MM-dd_HH-mm-ss.log`，同秒追加、跨天仍写原文件。关闭文件日志不创建目录、不清理历史；活动日志和未知命名文件不删除。
+- `Appearance.ShowcaseImageFile` 是房间侧栏展示图片，可为空；接口 `/assets/appearance/showcase` 需要认证。
 
 ## 6. 测试与验证
 
@@ -136,7 +139,7 @@ dotnet build Hsin.slnx -c Release
 dotnet test tests/Hsin.Tests/Hsin.Tests.csproj -c Release --no-build --filter "FullyQualifiedName~ConfigurationTests"
 pnpm --dir web install --frozen-lockfile
 pnpm --dir web run typecheck
-pnpm --dir web run test -- src/components/MetricSparkline.test.ts
+pnpm --dir web run test src/components/MetricSparkline.test.ts
 pnpm --dir web run build
 ```
 
@@ -147,12 +150,16 @@ $env:PLAYWRIGHT_BROWSERS_PATH=(Resolve-Path agent_tmp).Path
 pnpm --dir web run test:e2e --grep "pages.spec.ts"
 ```
 
+前端工具链版本见 `README.md`（Node.js 24.19.0、pnpm 12.6.0）。本地联调后端可用 `dotnet run --project server/Hsin.csproj -- --config <路径>`；不传 `--config` 时配置位于构建输出目录。该命令会按配置下载并启动真实 MediaMTX、占用 24515～24517 端口，不要与用户正在运行的实例共用配置或端口。
+
+单文件 Vitest 过滤不要在脚本名后加 `--`，否则 `--` 会原样传给 Vitest 并导致全部测试运行。`test:e2e` 自动在 `127.0.0.1:4173` 启动 Vite 并以 Chromium 运行，结果写入 `agent_tmp/playwright-results/`；页面测试通过 `page.route` 模拟 API，不需要运行后端。本地 `pnpm --dir web run dev` 将 `/api` 和 `/assets` 代理到 `http://localhost:24515`。
+
 测试范围：
 
 - 配置和服务端单元测试覆盖配置持久化、认证、日志、安装校验和进程边界。
-- 真媒体集成测试由 `HSIN_TEST_MEDIAMTX` 等显式环境条件启用；默认不启动或模拟真实推流，不占用用户现有实例的端口、不停止正在运行的服务。
+- 真媒体集成测试由显式环境条件启用：xUnit 使用 `HSIN_TEST_MEDIAMTX`（`[MediaIntegrationFact]`），Playwright `e2e/media.spec.ts` 使用指向运行中实例配置文件的 `HSIN_MEDIA_CONFIG`；默认不启动或模拟真实推流，不占用用户现有实例的端口、不停止正在运行的服务。
 - Debian 运行测试由用户执行，需要时给出步骤；不要在本机强行模拟 Debian 或把交叉编译当运行证据。未执行的真实 OBS、多观众及其他浏览器验收必须说明。
-- 前端单元测试覆盖 API、主题、Markdown、播放器状态、统计和调试历史；页面测试覆盖密码页、背景、主题、响应式调试窗和 WebRTC 页面流程。
+- 前端单元测试覆盖 API、主题、Markdown、播放器状态、统计和调试历史；页面测试覆盖密码页、便当布局、展示图片认证加载、主题、响应式统计面板和 WebRTC 页面流程。
 - 改动测试本身时必须重新运行对应测试；失败时报告实际失败原因，不用旧结果替代当前证据。
 
 ## 7. 发布与变更纪律
@@ -161,7 +168,7 @@ pnpm --dir web run test:e2e --grep "pages.spec.ts"
 - 设计和实现计划、代理工作文档、临时验证证据放在 `agent_tmp/`。用户要求先计划再实现时，先保存可执行计划；已授权的工作不重复索取确认。
 - 禁止过度工程化、过度防御性分支、仅服务测试桩的生产代码和无价值测试。不为假设中的未来需求或旧字段添加兼容层、映射、双读双写。
 - 不反复审查已检查的稳定模块；修复时只追查当前缺陷及相邻同类问题。保留用户已有修改，不做无关重构、格式化、依赖升级或配置变更。
-- 发布前端静态文件到 `server/wwwroot/`，发布产物写入 `artifacts/`；Windows 为 ZIP，Linux 为 TAR.GZ。
+- 发布前端静态文件到 `server/wwwroot/`，发布产物写入 `artifacts/`；Windows 为 ZIP，Linux 为 TAR.GZ。发布命令为 `pwsh -File scripts/publish.ps1 -Runtime win-x64|linux-x64` 或 `bash scripts/publish.sh linux-x64|win-x64`；同名产物已存在时脚本拒绝覆盖，在 Windows 打 Linux 包需要 Git for Windows 自带的 GNU tar/gzip。
 - 运行配置、日志、媒体下载、安装状态、发布产物、编译输出、Node 模块、测试报告和构建缓存不得提交。
 - 用户当前约束为不执行 Git 动作；未经明确授权不运行 Git 命令、不修改索引、不提交或推送。`.gitignore` 不会自动取消已有跟踪，需单独说明，不擅自清理索引。
 - 修改目录、项目路径或公开配置字段时，必须同步解决方案、测试项目、脚本、示例和文档，并运行至少一次构建验证。

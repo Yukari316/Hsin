@@ -27,13 +27,11 @@ public sealed class RoomController : ControllerBase
         return new JsonResult(
             new
             {
-                requiresToken       = !string.IsNullOrEmpty(options.WebUi.Token),
-                title               = options.Appearance.Title,
-                logoUrl             = ResourceUrl("logo"),
-                backgroundLeftUrl   = ResourceUrl("background-left"),
-                backgroundRightUrl  = ResourceUrl("background-right"),
-                mobileBackgroundUrl = ResourceUrl("background-mobile"),
-                passwordPrompt      = options.Appearance.PasswordPrompt
+                requiresToken    = !string.IsNullOrEmpty(options.WebUi.Token),
+                title            = options.Appearance.Title,
+                logoUrl          = ResourceUrl("logo"),
+                showcaseImageUrl = ResourceUrl("showcase"),
+                passwordPrompt   = options.Appearance.PasswordPrompt
             });
     }
 

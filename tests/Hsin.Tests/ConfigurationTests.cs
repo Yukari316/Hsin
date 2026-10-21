@@ -45,18 +45,8 @@ public sealed class ConfigurationTests
         await File.WriteAllBytesAsync(
             Path.Combine(
                 directory.Path,
-                "background-left.png"),
+                "showcase.png"),
             [1, 2, 3]);
-        await File.WriteAllBytesAsync(
-            Path.Combine(
-                directory.Path,
-                "background-right.png"),
-            [4, 5, 6]);
-        await File.WriteAllBytesAsync(
-            Path.Combine(
-                directory.Path,
-                "background-mobile.png"),
-            [7, 8, 9]);
         await File.WriteAllTextAsync(
             Path.Combine(
                 directory.Path,
@@ -68,7 +58,7 @@ public sealed class ConfigurationTests
                 "hsin.json"),
             """
             {
-              "Appearance": { "BackgroundLeftFile": "background-left.png", "BackgroundRightFile": "background-right.png", "MobileBackgroundFile": "background-mobile.png", "AnnouncementFile": "notice.md" },
+              "Appearance": { "ShowcaseImageFile": "showcase.png", "AnnouncementFile": "notice.md" },
               "Publish": { "BearerToken": "publisher:fixed" },
               "Logging": { "FileEnabled": false }
             }
@@ -87,13 +77,7 @@ public sealed class ConfigurationTests
             resolved.DataDirectory);
         Assert.Equal(
             [1, 2, 3],
-            resolved.Resources["background-left"].Content.ToArray());
-        Assert.Equal(
-            [4, 5, 6],
-            resolved.Resources["background-right"].Content.ToArray());
-        Assert.Equal(
-            [7, 8, 9],
-            resolved.Resources["background-mobile"].Content.ToArray());
+            resolved.Resources["showcase"].Content.ToArray());
         Assert.Equal(
             "# Notice",
             resolved.Announcement);
@@ -222,7 +206,7 @@ public sealed class ConfigurationTests
     }
 
     [Fact]
-    public async Task MobileBackgroundIsOptional()
+    public async Task ShowcaseImageIsOptional()
     {
         using TemporaryDirectory directory = new();
         string path = Path.Combine(
@@ -230,23 +214,23 @@ public sealed class ConfigurationTests
             "hsin.json");
 
         using ResolvedConfiguration resolved = await ConfigurationLoader.LoadAsync(path);
-        Assert.Equal(string.Empty, resolved.Options.Appearance.MobileBackgroundFile);
-        Assert.DoesNotContain("background-mobile", resolved.Resources.Keys);
+        Assert.Equal(string.Empty, resolved.Options.Appearance.ShowcaseImageFile);
+        Assert.DoesNotContain("showcase", resolved.Resources.Keys);
     }
 
     [Fact]
-    public async Task MobileBackgroundRejectsUnsupportedImageFormats()
+    public async Task ShowcaseImageRejectsUnsupportedImageFormats()
     {
         using TemporaryDirectory directory = new();
         string                   path      = Path.Combine(directory.Path, "hsin.json");
-        await File.WriteAllBytesAsync(Path.Combine(directory.Path, "background.bmp"), [1, 2, 3]);
+        await File.WriteAllBytesAsync(Path.Combine(directory.Path, "showcase.bmp"), [1, 2, 3]);
         await File.WriteAllTextAsync(
             path,
-            "{ \"Appearance\": { \"MobileBackgroundFile\": \"background.bmp\" } }");
+            "{ \"Appearance\": { \"ShowcaseImageFile\": \"showcase.bmp\" } }");
 
         InvalidDataException exception =
             await Assert.ThrowsAsync<InvalidDataException>(() => ConfigurationLoader.LoadAsync(path));
-        Assert.Contains("MobileBackgroundFile", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("ShowcaseImageFile", exception.Message, StringComparison.Ordinal);
     }
 
     [Theory]
